@@ -1,0 +1,25 @@
+[Unit]
+Description=Codeform barcode generator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=codeform
+Group=codeform
+WorkingDirectory=/opt/codeform
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/local/bin/npm run start -- --hostname 0.0.0.0 --port 3000
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/codeform/.wrangler
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
