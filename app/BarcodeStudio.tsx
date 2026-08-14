@@ -357,7 +357,7 @@ export default function BarcodeStudio() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/sw.js").catch(() => {
+      void navigator.serviceWorker.register("/sw.js?v=2").catch(() => {
         // Installation remains available online if offline support cannot initialize.
       });
     }
