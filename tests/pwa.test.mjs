@@ -7,12 +7,12 @@ test("ships an installable mobile PWA with platform-aware guidance", async () =>
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/BarcodeStudio.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
-    readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
+    readFile(new URL("../public/manifest.json", import.meta.url), "utf8"),
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
   ]);
   const manifest = JSON.parse(manifestSource);
 
-  assert.match(layout, /rel="manifest" href="\/manifest\.webmanifest"/);
+  assert.match(layout, /rel="manifest" href="\/manifest\.json"/);
   assert.match(layout, /apple-mobile-web-app-capable/);
   assert.match(studio, /beforeinstallprompt/);
   assert.match(studio, /navigator\.serviceWorker\.register\("\/sw\.js"\)/);

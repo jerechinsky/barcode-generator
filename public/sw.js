@@ -1,7 +1,7 @@
-const CACHE_NAME = "barcode-generator-pwa-v1";
+const CACHE_NAME = "barcode-generator-pwa-v2";
 const APP_SHELL = [
   "/",
-  "/manifest.webmanifest",
+  "/manifest.json",
   "/favicon.svg",
   "/pwa-icon-192.png",
   "/pwa-icon-512.png",
