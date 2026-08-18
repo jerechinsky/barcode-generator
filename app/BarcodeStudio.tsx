@@ -1902,17 +1902,19 @@ export default function BarcodeStudio() {
 
       <footer>
         <div className="footer-copy">
-          <span className="footer-credit">Vibe coded with ❤️ by Alex in Prague 🇨🇿</span>
+          <div className="footer-credit-line">
+            <span className="footer-credit">Vibecoded with ❤️ by Alex 🇨🇿</span>
+            <a
+              className="footer-source"
+              href="https://github.com/jerechinsky/barcode-generator"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Source available on GitHub <ExternalLink size={12} />
+            </a>
+          </div>
           <span>Everything is generated in your browser.</span>
         </div>
-        <a
-          className="footer-source"
-          href="https://github.com/jerechinsky/barcode-generator"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Source available on GitHub <ExternalLink size={12} />
-        </a>
       </footer>
     </main>
   );
