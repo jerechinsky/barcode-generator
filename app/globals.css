@@ -502,7 +502,10 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .pwa-install-action button { min-height: 52px; padding: 0 18px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid var(--ink); background: var(--acid); cursor: pointer; font-size: 13px; font-weight: 800; }
 .pwa-install-action button:hover { background: #dcf538; }
 .pwa-install-action p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
-footer { min-height: 74px; display: flex; align-items: center; justify-content: space-between; color: var(--muted); font: 600 9px/1 var(--font-geist-mono), monospace; letter-spacing: .08em; }
+footer { min-height: 88px; display: flex; align-items: center; justify-content: space-between; gap: 24px; color: var(--muted); font: 600 9px/1.45 var(--font-geist-mono), monospace; letter-spacing: .08em; }
+.footer-copy { display: flex; flex-direction: column; gap: 5px; }
+.footer-credit { color: var(--ink); font-size: 10px; white-space: nowrap; }
+.footer-source { display: inline-flex; align-items: center; gap: 5px; color: var(--green); font-weight: 750; text-underline-offset: 3px; }
 
 @media (display-mode: standalone) {
   .pwa-install { display: none !important; }
@@ -580,7 +583,7 @@ footer { min-height: 74px; display: flex; align-items: center; justify-content: 
   .guide-toggle { padding: 14px 0; align-items: flex-start; flex-direction: column; gap: 8px; }
   .pwa-install { padding: 22px 18px; grid-template-columns: 1fr; align-items: start; gap: 18px; }
   .pwa-install-action { width: 100%; min-width: 0; }
-  footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 8px; }
+  footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 10px; }
 }
 
 @media (max-height: 760px) and (min-width: 881px) {

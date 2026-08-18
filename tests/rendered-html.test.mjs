@@ -63,6 +63,9 @@ test("server-renders the complete Barcode Generator workspace", async () => {
   assert.match(html, /QR, Micro QR, rMQR, or iQR/);
   assert.match(html, /No DENSO fee/);
   assert.match(html, /registered trademark of DENSO WAVE INCORPORATED/);
+  assert.match(html, /Vibe coded with ❤️ by Alex in Prague 🇨🇿/);
+  assert.match(html, /Everything is generated in your browser\./);
+  assert.match(html, /https:\/\/github\.com\/jerechinsky\/barcode-generator/);
   assert.match(html, /Reset examples/);
   assert.doesNotMatch(html, /FC minimum|Fulfillment-center minimum|OPS NOTE/);
   assert.match(html, /https:\/\/ref\.gs1\.org\/standards\/genspecs\//);

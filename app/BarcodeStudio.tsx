@@ -1901,8 +1901,18 @@ export default function BarcodeStudio() {
       )}
 
       <footer>
-        <span>BARCODE GENERATOR · LOCAL BARCODE STUDIO</span>
-        <span>SVG paths · PNG with print DPI · standards-aware defaults</span>
+        <div className="footer-copy">
+          <span className="footer-credit">Vibe coded with ❤️ by Alex in Prague 🇨🇿</span>
+          <span>Everything is generated in your browser.</span>
+        </div>
+        <a
+          className="footer-source"
+          href="https://github.com/jerechinsky/barcode-generator"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Source available on GitHub <ExternalLink size={12} />
+        </a>
       </footer>
     </main>
   );
