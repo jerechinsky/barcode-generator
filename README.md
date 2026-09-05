@@ -20,6 +20,7 @@ Open `http://localhost:3000`.
 npm run lint
 npm test
 npm run typecheck
+npm audit
 ```
 
 Type checking uses the runtime declarations generated from the production build,
@@ -59,3 +60,24 @@ npm run start -- --hostname 0.0.0.0 --port 3000
   shows that the current draft cannot be saved.
 - Production installation caches the complete application for offline use.
   Each build has its own cache and update notification.
+
+## Barcode explanations
+
+Hover over the format badge beside “Enter the data” for a short explanation.
+Click or tap to keep it open; use Escape, the close button, or an outside click to
+close it. Each of the 11 formats has structure notes and links to primary sources.
+Retail numbers include their actual check-digit maths and, where available, a
+GS1 prefix explanation. Prefixes identify the allocating organisation, not where
+a product was manufactured. The offline lookup is intentionally partial.
+
+Mantine supplies accessible popovers and tooltips under a theme that preserves the
+existing typography, palette, and square corners. Only the component styles in use
+are imported. Explanations are hidden by default and remain available offline.
+
+## Dependency maintenance
+
+The scoped esbuild override for `@esbuild-kit/core-utils` removes its obsolete
+0.18.x development-server dependency. It uses the 0.25.12 version already used by
+Drizzle Kit; schema generation and both transform APIs were smoke-tested. Keep the
+override until Drizzle removes that legacy helper, and recheck those paths when
+updating it. See [QA.md](QA.md) for release validation and physical-print limits.

@@ -57,8 +57,8 @@ test("server-renders the complete Barcode Generator workspace", async () => {
   assert.match(html, /dimension-guide-x/);
   assert.match(html, /dimension-guide-y/);
   assert.match(html, /\* Preview always scaled to fit\. The white rectangle is the complete export/);
-  assert.match(html, /Why the extra digit/);
-  assert.match(html, /weighted 3, 1, 3, 1/);
+  assert.match(html, /aria-label="About EAN-13"/);
+  assert.doesNotMatch(html, /class="facts-scroll"/);
   assert.match(html, /Which size should I use/);
   assert.match(html, /QR, Micro QR, rMQR, or iQR/);
   assert.match(html, /No DENSO fee/);
@@ -97,7 +97,6 @@ test("ships production assets and self-hosting files", async () => {
   assert.match(packageJson, /"@bwip-js\/browser"/);
   assert.match(studio, /analyzeBarcodeCapacity/);
   assert.match(studio, /Micro QR capacity exceeded/);
-  assert.match(studio, /validation\.generatedCheckDigit &&/);
   assert.match(studio, /Human-readable digits/);
   assert.doesNotMatch(studio, /preview-type[\s\S]{0,160}\{type\.label\}/);
   assert.match(studio, /<span>Error correction<\/span><b>\{errorCorrection\} · about \{ERROR_CORRECTION_PERCENT\[errorCorrection\]\}%<\/b>/);
@@ -170,9 +169,7 @@ test("ships production assets and self-hosting files", async () => {
   assert.match(studio, /Barcode Generator update available/);
   assert.match(studio, /\/version\.json\?t=/);
   assert.match(studio, /window\.location\.reload\(\)/);
-  assert.match(studio, /role="tooltip"/);
-  assert.match(studio, /pointerover/);
-  assert.match(studio, /const selector = "\[data-tooltip\]"/);
+
   assert.doesNotMatch(studio, /Select \$\{item\.label\}: \$\{item\.description\}/);
   assert.match(studio, /hasGs1Preset \? "GS1 minimum for this format" : "Tight space reference"/);
   assert.doesNotMatch(studio, /GS1 minimum shown here/);

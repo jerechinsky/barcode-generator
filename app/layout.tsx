@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import "@mantine/core/styles/default-css-variables.css";
+import "@mantine/core/styles/global.css";
+import "@mantine/core/styles/UnstyledButton.css";
+import "@mantine/core/styles/Popover.css";
+import "@mantine/core/styles/Tooltip.css";
+import "@mantine/core/styles/CloseButton.css";
 import "./globals.css";
+import StudioProvider from "./StudioProvider";
 
 const title = "Barcode Generator · Print-ready barcode maker";
 const description =
@@ -41,7 +48,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-mantine-color-scheme="light">
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#e7ff45" />
@@ -49,7 +56,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Barcode Generator" />
       </head>
-      <body>{children}</body>
+      <body><StudioProvider>{children}</StudioProvider></body>
     </html>
   );
 }

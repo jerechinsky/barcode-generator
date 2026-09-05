@@ -1,5 +1,6 @@
 "use client";
 
+import { Tooltip } from "@mantine/core";
 import {
   AlertTriangle,
   ArrowDownToLine,
@@ -35,6 +36,7 @@ import {
 import { addPngDensity, pngExportError, svgForPng } from "./png";
 import { readStoredValue, removeStoredValue, writeStoredValue } from "./browser-storage";
 import buildVersion from "./build-version.json";
+import BarcodeFacts from "./BarcodeFacts";
 import { buildRulerScale, formatRulerDimension } from "./ruler";
 import { barHeightForOutputHeight, heightWarningSeverity, linearAxisControlsBarHeight, parseGuidedDimension, roundEditableMm } from "./dimension-editor";
 
@@ -236,8 +238,6 @@ function writeBarcodeKindToUrl(kind: BarcodeKind, mode: "push" | "replace") {
   window.history[mode === "push" ? "pushState" : "replaceState"]({ type: kind }, "", url);
 }
 
-type TooltipState = { text: string; left: number; top: number; below: boolean } | null;
-
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
@@ -255,12 +255,7 @@ function isRunningAsInstalledApp() {
     || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 }
 
-function tooltipTextFor(element: HTMLElement): string {
-  return element.dataset.tooltip ?? "";
-}
-
 export default function BarcodeStudio() {
-  const appShellRef = useRef<HTMLElement>(null);
   const [kind, setKind] = useState<BarcodeKind>("ean13");
   const [values, setValues] = useState<Record<BarcodeKind, string>>(defaultValues);
   const [shared2dTouched, setShared2dTouched] = useState(false);
@@ -304,8 +299,6 @@ export default function BarcodeStudio() {
   const [dimensionDraft, setDimensionDraft] = useState("");
   const [dimensionEditError, setDimensionEditError] = useState<string | null>(null);
   const [dimensionsLinked, setDimensionsLinked] = useState(true);
-  const [tooltip, setTooltip] = useState<TooltipState>(null);
-  const tooltipTimerRef = useRef<number | null>(null);
   const lastStandardPreset = useRef<"target" | "compact">("target");
   const dimensionInputRef = useRef<HTMLInputElement>(null);
 
@@ -314,54 +307,6 @@ export default function BarcodeStudio() {
     dimensionInputRef.current?.focus();
     dimensionInputRef.current?.select();
   }, [dimensionEdit]);
-
-  useEffect(() => {
-    const root = appShellRef.current;
-    if (!root) return;
-    const selector = "[data-tooltip]";
-    const cancelTooltip = () => {
-      if (tooltipTimerRef.current !== null) window.clearTimeout(tooltipTimerRef.current);
-      tooltipTimerRef.current = null;
-      setTooltip(null);
-    };
-    const showTooltip = (target: EventTarget | null) => {
-      if (!(target instanceof Element)) return;
-      const interactive = target.closest<HTMLElement>(selector);
-      if (!interactive || !root.contains(interactive)) return;
-      const text = tooltipTextFor(interactive);
-      if (!text) return;
-      if (tooltipTimerRef.current !== null) window.clearTimeout(tooltipTimerRef.current);
-      tooltipTimerRef.current = window.setTimeout(() => {
-        const rect = interactive.getBoundingClientRect();
-        const below = rect.top < 72;
-        setTooltip({
-          text,
-          left: Math.min(window.innerWidth - 14, Math.max(14, rect.left + rect.width / 2)),
-          top: below ? rect.bottom + 9 : rect.top - 9,
-          below,
-        });
-      }, 450);
-    };
-    const onPointerOver = (event: PointerEvent) => showTooltip(event.target);
-    const onPointerOut = (event: PointerEvent) => {
-      const from = event.target instanceof Element ? event.target.closest(selector) : null;
-      const to = event.relatedTarget instanceof Element ? event.relatedTarget.closest(selector) : null;
-      if (from !== to) cancelTooltip();
-    };
-    const onFocusIn = (event: FocusEvent) => showTooltip(event.target);
-    const onFocusOut = () => cancelTooltip();
-    root.addEventListener("pointerover", onPointerOver);
-    root.addEventListener("pointerout", onPointerOut);
-    root.addEventListener("focusin", onFocusIn);
-    root.addEventListener("focusout", onFocusOut);
-    return () => {
-      cancelTooltip();
-      root.removeEventListener("pointerover", onPointerOver);
-      root.removeEventListener("pointerout", onPointerOut);
-      root.removeEventListener("focusin", onFocusIn);
-      root.removeEventListener("focusout", onFocusOut);
-    };
-  }, []);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
@@ -591,6 +536,7 @@ export default function BarcodeStudio() {
     usesAutomaticPrintSize,
   ]);
   const rendered = renderResult.barcode;
+
   const dataError = validation.error ?? null;
   const settingsError = dataError ? null : renderResult.error;
   const hasCapacityError = Boolean(!dataError && capacity && !capacity.fits);
@@ -1017,16 +963,7 @@ export default function BarcodeStudio() {
   };
 
   return (
-    <main className="app-shell" ref={appShellRef}>
-      {tooltip && (
-        <div
-          className={`accessible-tooltip ${tooltip.below ? "below" : ""}`}
-          style={{ left: tooltip.left, top: tooltip.top }}
-          role="tooltip"
-        >
-          {tooltip.text}
-        </div>
-      )}
+    <main className="app-shell">
       {updateAvailable && (
         <div className="update-banner" role="status">
           <span><b>Barcode Generator update available.</b> Refresh to use the latest version.</span>
@@ -1098,7 +1035,7 @@ export default function BarcodeStudio() {
                 <span>02</span>
                 <h2>Enter the data</h2>
               </div>
-              <span className="type-pill">{type.label}</span>
+              <BarcodeFacts key={kind} kind={kind} label={type.label} encoded={validation.error ? undefined : validation.encoded} symbol={rendered} />
             </div>
 
             <label className="field-label" htmlFor="barcode-data">
@@ -1198,15 +1135,6 @@ export default function BarcodeStudio() {
                 <small>{encodedCopied ? "COPIED" : encodedCopyError ? "COPY UNAVAILABLE" : "COPY"}</small>
                 {encodedCopied ? <Check size={16} /> : <Copy size={16} />}
               </button>
-            )}
-
-            {validation.generatedCheckDigit && (
-              <div className="check-digit-note">
-                <Info size={16} />
-                <span>
-                  <b>Why the extra digit?</b> The final digit is a GS1 Mod 10 check digit. Starting from the right, the data digits are weighted 3, 1, 3, 1, then added together; the check digit brings that sum up to the next multiple of 10. For this code it is {validation.checkDigit}. It contains no additional product data; scanners use it to detect many typing and reading errors.
-                </span>
-              </div>
             )}
 
             <div className="format-context">
@@ -1492,26 +1420,24 @@ export default function BarcodeStudio() {
                 <div className="shape-control" role="group" aria-label="Data Matrix shape">
                   <span>Shape</span>
                   <div>
-                    <button
+                    <Tooltip label="Use a square Data Matrix symbol"><button
                       type="button"
                       className={dataMatrixShape === "square" ? "active" : ""}
                       aria-label="Square Data Matrix"
                       aria-pressed={dataMatrixShape === "square"}
-                      data-tooltip="Use a square Data Matrix symbol"
                       onClick={() => setDataMatrixShape("square")}
                     >
                       <Square size={19} strokeWidth={2.2} />
-                    </button>
-                    <button
+                    </button></Tooltip>
+                    <Tooltip label="Use a rectangular Data Matrix symbol"><button
                       type="button"
                       className={dataMatrixShape === "rectangle" ? "active" : ""}
                       aria-label="Rectangular Data Matrix"
                       aria-pressed={dataMatrixShape === "rectangle"}
-                      data-tooltip="Use a rectangular Data Matrix symbol"
                       onClick={() => setDataMatrixShape("rectangle")}
                     >
                       <RectangleHorizontal size={22} strokeWidth={2.2} />
-                    </button>
+                    </button></Tooltip>
                   </div>
                 </div>
               )}
@@ -1610,17 +1536,18 @@ export default function BarcodeStudio() {
                           />
                           <i>mm</i>
                           {!hasSquareOutput && (
+                            <Tooltip label={dimensionsLinked ? "Proportions locked. Width and height scale together." : "Proportions unlocked. Edit one dimension independently."}>
                             <button
                               type="button"
                               className={`dimension-link ${dimensionsLinked ? "active" : ""}`}
                               aria-label={dimensionsLinked ? "Unlock proportions" : "Lock proportions"}
                               aria-pressed={dimensionsLinked}
-                              data-tooltip={dimensionsLinked ? "Proportions locked. Width and height scale together." : "Proportions unlocked. Edit one dimension independently."}
                               onMouseDown={(event) => event.preventDefault()}
                               onClick={() => setDimensionsLinked((linked) => !linked)}
                             >
                               {dimensionsLinked ? <Link2 size={13} /> : <Unlink2 size={13} />}
                             </button>
+                            </Tooltip>
                           )}
                         </span>
                       ) : (
@@ -1667,17 +1594,18 @@ export default function BarcodeStudio() {
                           />
                           <i>mm</i>
                           {!hasSquareOutput && (
+                            <Tooltip label={dimensionsLinked ? "Proportions locked. Width and height scale together." : "Proportions unlocked. Edit one dimension independently."}>
                             <button
                               type="button"
                               className={`dimension-link ${dimensionsLinked ? "active" : ""}`}
                               aria-label={dimensionsLinked ? "Unlock proportions" : "Lock proportions"}
                               aria-pressed={dimensionsLinked}
-                              data-tooltip={dimensionsLinked ? "Proportions locked. Width and height scale together." : "Proportions unlocked. Edit one dimension independently."}
                               onMouseDown={(event) => event.preventDefault()}
                               onClick={() => setDimensionsLinked((linked) => !linked)}
                             >
                               {dimensionsLinked ? <Link2 size={13} /> : <Unlink2 size={13} />}
                             </button>
+                            </Tooltip>
                           )}
                         </span>
                       ) : (
