@@ -83,6 +83,8 @@ test("activation removes only this application's obsolete caches", async () => {
 test("production offline manifest includes every built script and its build version", async () => {
   const worker = await readFile(new URL("../dist/client/sw.js", import.meta.url), "utf8");
   const { version } = JSON.parse(await readFile(new URL("../dist/client/version.json", import.meta.url), "utf8"));
+  const embedded = JSON.parse(await readFile(new URL("../app/build-version.json", import.meta.url), "utf8"));
+  assert.equal(embedded.version, version, "offline-first update checks must compare against the exact loaded build");
   assert.ok(worker.includes(`barcode-generator-pwa-${version}`));
   const assets = JSON.parse(worker.match(/const BUILD_ASSETS = (\[[^;]+\]);/)[1]);
   assert.ok(assets.some((asset) => asset.endsWith(".js")));

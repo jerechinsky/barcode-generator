@@ -34,7 +34,7 @@ import {
 } from "./barcode";
 import { addPngDensity, pngExportError, svgForPng } from "./png";
 import { readStoredValue, removeStoredValue, writeStoredValue } from "./browser-storage";
-import buildVersion from "../public/version.json";
+import buildVersion from "./build-version.json";
 import { buildRulerScale, formatRulerDimension } from "./ruler";
 import { barHeightForOutputHeight, heightWarningSeverity, linearAxisControlsBarHeight, parseGuidedDimension, roundEditableMm } from "./dimension-editor";
 
