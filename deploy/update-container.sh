@@ -2,32 +2,63 @@
 set -euo pipefail
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-systemctl stop codeform.service
+exec 9>/var/lock/codeform-update.lock
+flock -n 9
 
-if [[ -d /opt/codeform/dist ]]; then
-  mv /opt/codeform/dist /opt/codeform/dist.previous
+app_dir=/opt/codeform
+staging=$(mktemp -d /opt/codeform-stage.XXXXXX)
+backup="${app_dir}.previous.$(date -u +%Y%m%dT%H%M%SZ)"
+cleanup() {
+  if [[ -n "$staging" && -d "$staging" ]]; then rm -rf "$staging"; fi
+}
+trap cleanup EXIT
+
+# Retain server-local configuration and dependencies while building separately.
+cp -a "$app_dir/." "$staging/"
+tar -xzf /tmp/codeform-update.tar.gz -C "$staging"
+cd "$staging"
+if ! cmp -s package-lock.json "$app_dir/package-lock.json"; then
+  /usr/local/bin/npm ci --no-audit --no-fund
 fi
-if [[ -d /opt/codeform/.vinext ]]; then
-  mv /opt/codeform/.vinext /opt/codeform/.vinext.previous
-fi
+rm -rf dist .vinext
+/usr/local/bin/npm run lint
+/usr/local/bin/npm test
+/usr/local/bin/npm run typecheck
+expected_version=$(cat dist/client/version.json)
+chown -R codeform:codeform "$staging"
+# mktemp creates mode 0700; the service user must be able to enter the release.
+chmod 0755 "$staging"
 
 restore_previous() {
-  rm -rf /opt/codeform/dist /opt/codeform/.vinext
-  if [[ -d /opt/codeform/dist.previous ]]; then
-    mv /opt/codeform/dist.previous /opt/codeform/dist
+  local status=$?
+  trap - ERR
+  set +e
+  if [[ -d "$backup" ]]; then
+    systemctl stop codeform.service
+    if [[ -d "$app_dir" ]]; then mv "$app_dir" "${backup}.failed"; fi
+    mv "$backup" "$app_dir"
   fi
-  if [[ -d /opt/codeform/.vinext.previous ]]; then
-    mv /opt/codeform/.vinext.previous /opt/codeform/.vinext
-  fi
-  chown -R codeform:codeform /opt/codeform
   systemctl start codeform.service
+  exit "$status"
 }
-
 trap restore_previous ERR
-tar -xzf /tmp/codeform-update.tar.gz -C /opt/codeform
-cd /opt/codeform
-/usr/local/bin/npm run build
-chown -R codeform:codeform /opt/codeform
-rm -rf /opt/codeform/dist.previous /opt/codeform/.vinext.previous
+systemctl stop codeform.service
+mv "$app_dir" "$backup"
+mv "$staging" "$app_dir"
+staging=""
+cd "$app_dir"
 systemctl start codeform.service
+
+healthy=false
+for attempt in {1..30}; do
+  if systemctl is-active --quiet codeform.service &&
+    [[ "$(curl -fsS --max-time 2 http://127.0.0.1:3000/version.json 2>/dev/null || true)" == "$expected_version" ]] &&
+    curl -fsS --max-time 2 -o /dev/null http://127.0.0.1:3000/; then
+    healthy=true
+    break
+  fi
+  sleep 1
+done
+[[ "$healthy" == true ]]
 trap - ERR
+printf 'Deployment healthy. Rollback copy retained at %s\n' "$backup"

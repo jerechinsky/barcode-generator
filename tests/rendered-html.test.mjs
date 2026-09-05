@@ -174,7 +174,7 @@ test("ships production assets and self-hosting files", async () => {
   assert.match(studio, /pointerover/);
   assert.match(studio, /const selector = "\[data-tooltip\]"/);
   assert.doesNotMatch(studio, /Select \$\{item\.label\}: \$\{item\.description\}/);
-  assert.match(studio, /Bar height is below the.*GS1 minimum for this format/);
+  assert.match(studio, /hasGs1Preset \? "GS1 minimum for this format" : "Tight space reference"/);
   assert.doesNotMatch(studio, /GS1 minimum shown here/);
   assert.match(studio, /ClipboardItem\.supports\("image\/png"\)/);
   assert.match(studio, /"text\/html": new Blob/);

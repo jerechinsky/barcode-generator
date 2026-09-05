@@ -28,7 +28,7 @@ export function buildRulerScale(lengthMm: number, largestDimensionMm: number): R
   if (!Number.isFinite(lengthMm) || lengthMm <= 0) return { unit: "mm", ticks: [] };
 
   const unit: RulerUnit = largestDimensionMm >= CENTIMETRE_THRESHOLD_MM ? "cm" : "mm";
-  const minorStepMm = unit === "cm" ? 10 : 1;
+  const minorStepMm = Math.max(unit === "cm" ? 10 : 1, niceStepAtLeast(lengthMm / 200));
   const adaptiveStepMm = niceStepAtLeast(largestDimensionMm / MAX_LABEL_INTERVALS);
   const labelStepMm = unit === "cm"
     ? Math.max(10, adaptiveStepMm)

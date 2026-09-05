@@ -24,6 +24,7 @@ import {
   filenameFor,
   isNumericKind,
   renderBarcode,
+  scaleLinearBarcode,
   validateValue,
   type BarcodeKind,
   type RmqrMode,
@@ -31,7 +32,9 @@ import {
   type Rotation,
   type SizePreset,
 } from "./barcode";
-import { addPngDensity } from "./png";
+import { addPngDensity, pngExportError, svgForPng } from "./png";
+import { readStoredValue, removeStoredValue, writeStoredValue } from "./browser-storage";
+import buildVersion from "../public/version.json";
 import { buildRulerScale, formatRulerDimension } from "./ruler";
 import { barHeightForOutputHeight, heightWarningSeverity, linearAxisControlsBarHeight, parseGuidedDimension, roundEditableMm } from "./dimension-editor";
 
@@ -193,7 +196,8 @@ function downloadBlob(blob: Blob, filename: string) {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  // The browser may begin reading the download after this click handler returns.
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 function formatMm(value: number) {
@@ -261,6 +265,7 @@ export default function BarcodeStudio() {
   const [values, setValues] = useState<Record<BarcodeKind, string>>(defaultValues);
   const [shared2dTouched, setShared2dTouched] = useState(false);
   const [storageReady, setStorageReady] = useState(false);
+  const [storageAvailable, setStorageAvailable] = useState(true);
   const [preset, setPreset] = useState<SizePreset>("target");
   const [customX, setCustomX] = useState(0.33);
   const [customHeight, setCustomHeight] = useState(22.85);
@@ -283,12 +288,15 @@ export default function BarcodeStudio() {
   const [dataMatrixShape, setDataMatrixShape] = useState<"square" | "rectangle">("square");
   const [dpi, setDpi] = useState<(typeof DPI_OPTIONS)[number]>(600);
   const [encodedCopied, setEncodedCopied] = useState(false);
+  const [encodedCopyError, setEncodedCopyError] = useState(false);
+  const [pngBusy, setPngBusy] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [pngCopyStatus, setPngCopyStatus] = useState<"idle" | "copied" | "unsupported" | "error">("idle");
   const [svgCopyStatus, setSvgCopyStatus] = useState<"idle" | "vector" | "source" | "error">("idle");
   const [guideOpen, setGuideOpen] = useState(true);
   const [formatGuideOpen, setFormatGuideOpen] = useState(true);
   const [updateAvailable, setUpdateAvailable] = useState(false);
-  const loadedVersionRef = useRef<string | null>(null);
+  const loadedVersionRef = useRef(buildVersion.version);
   const [installCapability, setInstallCapability] = useState<InstallCapability>("manual");
   const [installMessage, setInstallMessage] = useState<string | null>(null);
   const installPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
@@ -356,8 +364,8 @@ export default function BarcodeStudio() {
   }, []);
 
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/sw.js?v=2").catch(() => {
+    if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw.js?v=3").catch(() => {
         // Installation remains available online if offline support cannot initialize.
       });
     }
@@ -404,9 +412,7 @@ export default function BarcodeStudio() {
         if (!response.ok) return;
         const payload = await response.json() as { version?: unknown };
         if (typeof payload.version !== "string") return;
-        if (loadedVersionRef.current === null) {
-          loadedVersionRef.current = payload.version;
-        } else if (!disposed && payload.version !== loadedVersionRef.current) {
+        if (!disposed && payload.version !== loadedVersionRef.current) {
           setUpdateAvailable(true);
         }
       } catch {
@@ -444,14 +450,14 @@ export default function BarcodeStudio() {
 
   useEffect(() => {
     const restoreTimer = window.setTimeout(() => {
+      let restoredKind: BarcodeKind = "ean13";
       try {
-        const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null") as {
+        const saved = JSON.parse(readStoredValue(STORAGE_KEY) ?? "null") as {
           version?: number;
           activeKind?: unknown;
           values?: Record<string, unknown>;
           shared2dTouched?: unknown;
         } | null;
-        let restoredKind: BarcodeKind = "ean13";
         if (saved?.version === 1) {
           const restored = defaultValues();
           for (const barcodeType of BARCODE_TYPES) {
@@ -464,14 +470,13 @@ export default function BarcodeStudio() {
           setShared2dTouched(saved.shared2dTouched === true);
           if (isBarcodeKind(saved.activeKind)) restoredKind = saved.activeKind;
         }
-        const urlSelection = barcodeKindFromUrl();
-        const nextKind = urlSelection.kind ?? (urlSelection.hasType ? "ean13" : restoredKind);
-        applyKindSettings(nextKind);
-        writeBarcodeKindToUrl(nextKind, "replace");
       } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
-        writeBarcodeKindToUrl("ean13", "replace");
+        removeStoredValue(STORAGE_KEY);
       }
+      const urlSelection = barcodeKindFromUrl();
+      const nextKind = urlSelection.kind ?? (urlSelection.hasType ? "ean13" : restoredKind);
+      applyKindSettings(nextKind);
+      writeBarcodeKindToUrl(nextKind, "replace");
       setStorageReady(true);
     }, 0);
     return () => window.clearTimeout(restoreTimer);
@@ -490,13 +495,17 @@ export default function BarcodeStudio() {
 
   useEffect(() => {
     if (!storageReady) return;
-    const savedValues = Object.fromEntries(
-      Object.entries(values).filter(([, savedValue]) => savedValue.length <= MAX_SAVED_VALUE_LENGTH),
-    );
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ version: 1, activeKind: kind, values: savedValues, shared2dTouched }),
-    );
+    const saveTimer = window.setTimeout(() => {
+      const savedValues = Object.fromEntries(
+        Object.entries(values).filter(([, savedValue]) => savedValue.length <= MAX_SAVED_VALUE_LENGTH),
+      );
+      const saved = writeStoredValue(
+        STORAGE_KEY,
+        JSON.stringify({ version: 1, activeKind: kind, values: savedValues, shared2dTouched }),
+      );
+      setStorageAvailable(saved && values[kind].length <= MAX_SAVED_VALUE_LENGTH);
+    }, 0);
+    return () => window.clearTimeout(saveTimer);
   }, [kind, shared2dTouched, storageReady, values]);
 
   const type = BARCODE_TYPES.find((item) => item.id === kind)!;
@@ -511,8 +520,8 @@ export default function BarcodeStudio() {
       ? microQrErrorCorrection
       : qrErrorCorrection;
   const capacity = useMemo(
-    () => analyzeBarcodeCapacity({ kind, value, errorCorrection }),
-    [errorCorrection, kind, value],
+    () => validation.error ? undefined : analyzeBarcodeCapacity({ kind, value, errorCorrection }),
+    [errorCorrection, kind, value, validation.error],
   );
   const dimensionName = type.linear
     ? "X-dimension"
@@ -650,7 +659,7 @@ export default function BarcodeStudio() {
     ) {
       return {
         severity: heightWarningSeverity(rendered.barHeight, guidance.compactHeight) ?? "caution",
-        message: `Bar height is below the ${guidance.compactHeight} mm GS1 minimum for this format. Short bars scan from fewer angles, so test the finished pack.`,
+        message: `Bar height is below the ${guidance.compactHeight} mm ${hasGs1Preset ? "GS1 minimum for this format" : "Tight space reference"}. Short bars scan from fewer angles, so test the finished pack.`,
       };
     }
     if (
@@ -685,6 +694,7 @@ export default function BarcodeStudio() {
 
   const pngWidth = rendered ? Math.ceil((rendered.widthMm / 25.4) * dpi) : 0;
   const pngHeight = rendered ? Math.ceil((rendered.heightMm / 25.4) * dpi) : 0;
+  const pngSizeError = rendered ? pngExportError(pngWidth, pngHeight) : null;
   const previewAspect = rendered ? rendered.widthMm / rendered.heightMm : 1;
   const previewLargestDimension = rendered ? Math.max(rendered.widthMm, rendered.heightMm) : 0;
   const horizontalRuler = rendered
@@ -701,7 +711,7 @@ export default function BarcodeStudio() {
     : undefined;
 
   const setValue = (next: string) => {
-    const normalized = isNumericKind(kind) ? next.replace(/\D/g, "") : next;
+    const normalized = next;
     setValues((current) => {
       if (!PORTABLE_2D_SET.has(kind)) return { ...current, [kind]: normalized };
       const updated = { ...current };
@@ -714,7 +724,7 @@ export default function BarcodeStudio() {
   const resetExamples = () => {
     setValues(defaultValues());
     setShared2dTouched(false);
-    window.localStorage.removeItem(STORAGE_KEY);
+    removeStoredValue(STORAGE_KEY);
   };
 
   const selectKind = (nextKind: BarcodeKind) => {
@@ -771,6 +781,25 @@ export default function BarcodeStudio() {
     if (dimensionsLinked && !hasSquareOutput) {
       const currentDimension = axis === "width" ? rendered.widthMm : rendered.heightMm;
       const scale = parsed.value / currentDimension;
+      if (type.linear) {
+        try {
+          const scaled = scaleLinearBarcode({
+            kind, value, preset: "custom", customX: rendered.xDimension,
+            customHeight: rendered.barHeight ?? guidance.targetHeight ?? 15,
+            includeText, rotation, errorCorrection,
+          }, scale);
+          selectPreset("custom");
+          setCustomMeasure("x");
+          setCustomX(scaled.xDimension);
+          setHeightLimit(roundEditableMm(scaled.barHeight!));
+          setLimitHeight(true);
+          setDimensionEdit(null);
+          setDimensionEditError(null);
+        } catch (error) {
+          setDimensionEditError(friendlyRenderError(kind, error));
+        }
+        return;
+      }
       if (kind === "rmqr") {
         setRmqrMode("exact");
         if (rendered.rmqrVersion) setRmqrVersion(rendered.rmqrVersion);
@@ -779,16 +808,6 @@ export default function BarcodeStudio() {
       }
       setCustomMeasure("x");
       setCustomX(rendered.xDimension * scale);
-      if (type.linear) {
-        const otherCurrentDimension = axis === "width" ? rendered.heightMm : rendered.widthMm;
-        const targetOutputHeight = axis === "width" ? otherCurrentDimension * scale : parsed.value;
-        setHeightLimit(roundEditableMm(barHeightForOutputHeight(
-          rendered.heightMm,
-          rendered.barHeight ?? guidance.targetHeight ?? 15,
-          targetOutputHeight,
-        )));
-        setLimitHeight(true);
-      }
       setDimensionEdit(null);
       setDimensionEditError(null);
       return;
@@ -853,7 +872,8 @@ export default function BarcodeStudio() {
 
   const createPngBlob = async (): Promise<Blob> => {
     if (!rendered) throw new Error("There is no barcode to export.");
-    const svgBlob = new Blob([rendered.svg], { type: "image/svg+xml;charset=utf-8" });
+    if (pngSizeError) throw new Error(pngSizeError);
+    const svgBlob = new Blob([svgForPng(rendered.svg)], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(svgBlob);
     const image = new Image();
     image.decoding = "sync";
@@ -888,15 +908,23 @@ export default function BarcodeStudio() {
   };
 
   const downloadPng = async () => {
-    if (!rendered) return;
-    const pngBlob = await createPngBlob();
-    downloadBlob(pngBlob, filenameFor(kind, rendered.encoded, "png", dpi));
+    if (!rendered || pngBusy) return;
+    setPngBusy(true);
+    setExportError(null);
+    try {
+      const pngBlob = await createPngBlob();
+      downloadBlob(pngBlob, filenameFor(kind, rendered.encoded, "png", dpi));
+    } catch {
+      setExportError("Could not create the PNG. Try a lower DPI or download SVG.");
+    } finally {
+      setPngBusy(false);
+    }
   };
 
   const copyPng = async () => {
     if (!rendered) return;
     const canCopyPng = Boolean(
-      navigator.clipboard?.write &&
+      typeof navigator.clipboard?.write === "function" &&
       typeof ClipboardItem !== "undefined" &&
       (typeof ClipboardItem.supports !== "function" || ClipboardItem.supports("image/png")),
     );
@@ -917,9 +945,14 @@ export default function BarcodeStudio() {
 
   const copyEncoded = async () => {
     if (!rendered) return;
-    await navigator.clipboard.writeText(rendered.encoded);
-    setEncodedCopied(true);
-    window.setTimeout(() => setEncodedCopied(false), 1400);
+    try {
+      await navigator.clipboard.writeText(rendered.encoded);
+      setEncodedCopied(true);
+      setEncodedCopyError(false);
+    } catch {
+      setEncodedCopyError(true);
+    }
+    window.setTimeout(() => { setEncodedCopied(false); setEncodedCopyError(false); }, 2200);
   };
 
   const copySvg = async () => {
@@ -932,7 +965,7 @@ export default function BarcodeStudio() {
       `<svg width="${clipboardWidthPx.toFixed(3)}" height="${clipboardHeightPx.toFixed(3)}" `,
     );
     const canWriteRichClipboard = Boolean(
-      navigator.clipboard?.write &&
+      typeof navigator.clipboard?.write === "function" &&
       typeof ClipboardItem !== "undefined",
     );
     if (canWriteRichClipboard) {
@@ -1073,7 +1106,9 @@ export default function BarcodeStudio() {
             </label>
             <div className="field-memory">
               <span>
-                {PORTABLE_2D_SET.has(kind) && shared2dTouched
+                {!storageAvailable
+                  ? "Draft saving unavailable. Keep this tab open or export your barcode."
+                  : PORTABLE_2D_SET.has(kind) && shared2dTouched
                   ? "Saved in this browser · shared across compatible matrix and stacked codes"
                   : "Example for this format · saved in this browser"}
               </span>
@@ -1160,7 +1195,7 @@ export default function BarcodeStudio() {
               <button className="encoded-value" type="button" onClick={copyEncoded}>
                 <span>COMPLETE {rendered.encoded.length}-DIGIT CODE</span>
                 <strong>{rendered.encoded}</strong>
-                <small>{encodedCopied ? "COPIED" : "COPY"}</small>
+                <small>{encodedCopied ? "COPIED" : encodedCopyError ? "COPY UNAVAILABLE" : "COPY"}</small>
                 {encodedCopied ? <Check size={16} /> : <Copy size={16} />}
               </button>
             )}
@@ -1562,10 +1597,7 @@ export default function BarcodeStudio() {
                               setDimensionDraft(event.target.value);
                               setDimensionEditError(null);
                             }}
-                            onBlur={() => {
-                              setDimensionEdit(null);
-                              setDimensionEditError(null);
-                            }}
+                            onBlur={() => commitDimensionEdit("width")}
                             onKeyDown={(event) => {
                               if (event.key === "Enter") {
                                 event.preventDefault();
@@ -1622,10 +1654,7 @@ export default function BarcodeStudio() {
                               setDimensionDraft(event.target.value);
                               setDimensionEditError(null);
                             }}
-                            onBlur={() => {
-                              setDimensionEdit(null);
-                              setDimensionEditError(null);
-                            }}
+                            onBlur={() => commitDimensionEdit("height")}
                             onKeyDown={(event) => {
                               if (event.key === "Enter") {
                                 event.preventDefault();
@@ -1735,14 +1764,15 @@ export default function BarcodeStudio() {
                   {rendered ? `${pngWidth.toLocaleString()} × ${pngHeight.toLocaleString()} px at ${dpi} DPI` : "Resolution applies only to PNG."}
                 </p>
                 <div className="export-actions">
-                  <button className="secondary-download" type="button" onClick={downloadPng} disabled={!rendered}>
-                    <ArrowDownToLine size={19} /> Download PNG
+                  <button className="secondary-download" type="button" onClick={downloadPng} disabled={!rendered || pngBusy || Boolean(pngSizeError)}>
+                    <ArrowDownToLine size={19} /> {pngBusy ? "Preparing PNG…" : "Download PNG"}
                   </button>
-                  <button className="copy-export-button" type="button" onClick={copyPng} disabled={!rendered}>
+                  <button className="copy-export-button" type="button" onClick={copyPng} disabled={!rendered || pngBusy || Boolean(pngSizeError)}>
                     {pngCopyStatus === "copied" ? <Check size={18} /> : <Copy size={18} />}
                     {pngCopyStatus === "copied" ? "Copied PNG" : pngCopyStatus === "unsupported" ? "Copy unavailable" : pngCopyStatus === "error" ? "Could not copy" : "Copy PNG"}
                   </button>
                 </div>
+                {(pngSizeError || exportError) && <p className="validation-line error" role="alert">{pngSizeError || exportError}</p>}
               </div>
             </div>
           </div>

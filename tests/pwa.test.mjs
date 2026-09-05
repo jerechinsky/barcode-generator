@@ -15,7 +15,7 @@ test("ships an installable mobile PWA with platform-aware guidance", async () =>
   assert.match(layout, /rel="manifest" href="\/manifest\.json"/);
   assert.match(layout, /apple-mobile-web-app-capable/);
   assert.match(studio, /beforeinstallprompt/);
-  assert.match(studio, /navigator\.serviceWorker\.register\("\/sw\.js\?v=2"\)/);
+  assert.match(studio, /navigator\.serviceWorker\.register\("\/sw\.js\?v=3"\)/);
   assert.match(studio, /Install as PWA/);
   assert.match(studio, /Tap Share, choose Add to Home Screen/);
   assert.match(stylesheet, /@media \(max-width: 880px\) and \(pointer: coarse\)/);

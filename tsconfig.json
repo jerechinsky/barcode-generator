@@ -18,6 +18,7 @@
     }
   },
   "include": [
+    ".wrangler/types/**/*.d.ts",
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",

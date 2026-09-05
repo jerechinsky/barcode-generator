@@ -313,6 +313,9 @@ export type ValidationResult = {
 };
 
 export function validateValue(kind: BarcodeKind, input: string): ValidationResult {
+  if (input.length > 8192) {
+    return { encoded: input, error: "This value is too long. Use at most 8,192 characters." };
+  }
   const trimmedValue = input.trim();
   const rule = NUMBER_RULES[kind];
 
@@ -412,7 +415,7 @@ function canEncodeMicroQr(value: string, errorCorrection: "L" | "M" | "Q") {
       text: value,
       eclevel: errorCorrection,
       fixedeclevel: true,
-    })[0];
+    } as Parameters<typeof bwipjs.raw>[0])[0];
     return isMatrixRawSymbol(symbol) ? symbol : undefined;
   } catch {
     return undefined;
@@ -939,7 +942,7 @@ function renderBarcodeAtX(input: RenderInput): RenderedBarcode {
     }
     if (input.kind === "code128") {
       const quietZoneMm = quietModules * xDimension;
-      const paddingPoints = Math.max(1, Math.round(quietZoneMm * 2.835));
+      const paddingPoints = Math.max(1, Math.ceil(quietZoneMm * 2.835));
       options.paddingleft = paddingPoints;
       options.paddingright = paddingPoints;
     }
@@ -951,6 +954,9 @@ function renderBarcodeAtX(input: RenderInput): RenderedBarcode {
         ? "Module size must be greater than 0 mm."
         : "X-dimension must be greater than 0 mm.",
     );
+  }
+  if (!isTwoDimensional && (!Number.isFinite(barHeight) || (barHeight ?? 0) <= 0)) {
+    throw new Error("Bar height must be greater than 0 mm.");
   }
 
   let svg: string;
@@ -1001,7 +1007,7 @@ function renderBarcodeAtX(input: RenderInput): RenderedBarcode {
   };
 }
 
-export function renderBarcode(input: RenderInput): RenderedBarcode {
+function renderBarcodeForSize(input: RenderInput): RenderedBarcode {
   if (input.kind === "rmqr" && input.rmqrMode === "fit") {
     return renderBarcodeAtX({ ...input, targetWidth: undefined });
   }
@@ -1045,6 +1051,7 @@ export function renderBarcode(input: RenderInput): RenderedBarcode {
   const validation = validateValue(input.kind, input.value);
   if (validation.error) throw new Error(validation.error);
   const symbolModules = linearModuleWidth(input.kind, validation.encoded);
+  if (requestedWidth === undefined) return renderBarcodeAtX(input);
   // BWIPP's linear renderer accepts a bar width from 0.01 to 20 inches. Keep
   // every probe just inside that range. The previous search used the requested
   // physical width as an X-dimension upper bound, so a harmless request such as
@@ -1058,11 +1065,16 @@ export function renderBarcode(input: RenderInput): RenderedBarcode {
     high = Math.min(high, (10 / (5 * 2.835)) * 0.99999);
   }
 
+  const firstX = Math.min(high, Math.max(low, requestedWidth / symbolModules));
   let closest = renderBarcodeAtX({
     ...input,
-    customX: Math.min(high, Math.max(low, requestedWidth / symbolModules)),
+    customX: firstX,
     targetWidth: undefined,
   });
+  if ((firstX === high && closest.widthMm + 0.08 < requestedWidth) ||
+    (firstX === low && closest.widthMm - 0.08 > requestedWidth)) {
+    throw new Error("This total width is outside the renderer's range for this barcode. Choose a different width.");
+  }
   for (let index = 0; index < 24; index += 1) {
     const customX = (low + high) / 2;
     const candidate = renderBarcodeAtX({ ...input, customX, targetWidth: undefined });
@@ -1072,7 +1084,44 @@ export function renderBarcode(input: RenderInput): RenderedBarcode {
     if (candidate.widthMm < requestedWidth) low = customX;
     else high = customX;
   }
+  if (Math.abs(closest.widthMm - requestedWidth) > 0.08) {
+    throw new Error("This total width is outside the renderer's range for this barcode. Choose a different width.");
+  }
   return closest;
+}
+
+export function renderBarcode(input: RenderInput): RenderedBarcode {
+  const rendered = renderBarcodeForSize(input);
+  if (!Number.isFinite(rendered.widthMm) || !Number.isFinite(rendered.heightMm) ||
+    rendered.widthMm > 1000 || rendered.heightMm > 1000) {
+    throw new Error("Output size must not exceed 1,000 mm on either side.");
+  }
+  return rendered;
+}
+
+/** Scale both visible axes, accounting for HRI and bearer bars at the new X. */
+export function scaleLinearBarcode(input: RenderInput, factor: number): RenderedBarcode {
+  if (!Number.isFinite(factor) || factor <= 0) throw new Error("Scale must be greater than zero.");
+  const current = renderBarcode(input);
+  const currentWidth = input.rotation === "R" ? current.heightMm : current.widthMm;
+  const currentHeight = input.rotation === "R" ? current.widthMm : current.heightMm;
+  const resized = renderBarcode({
+    ...input,
+    preset: "custom",
+    customX: current.xDimension,
+    customHeight: current.barHeight ?? input.customHeight,
+    rotation: "N",
+    targetWidth: currentWidth * factor,
+    targetHeight: undefined,
+  });
+  return renderBarcode({
+    ...input,
+    preset: "custom",
+    customX: resized.xDimension,
+    barHeightOverride: (resized.barHeight ?? input.customHeight) + currentHeight * factor - resized.heightMm,
+    targetWidth: undefined,
+    targetHeight: undefined,
+  });
 }
 
 export function filenameFor(

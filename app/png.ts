@@ -1,5 +1,22 @@
 const PNG_SIGNATURE_LENGTH = 8;
 
+export function svgForPng(svg: string): string {
+  // Rasterize module boundaries on the pixel grid. Smooth grey edge pixels
+  // can prevent a narrow rMQR symbol from being detected at common print DPIs.
+  return svg.replace("<svg ", '<svg shape-rendering="crispEdges" ');
+}
+
+// Bound allocation before creating a canvas, including on mobile browsers.
+export function pngExportError(width: number, height: number): string | null {
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width <= 0 || height <= 0) {
+    return "Choose a valid print size before exporting PNG.";
+  }
+  if (width > 8192 || height > 8192 || width * height > 16_000_000) {
+    return "This PNG is too large. Lower the DPI or print size, or download SVG.";
+  }
+  return null;
+}
+
 function readUint32(bytes: Uint8Array, offset: number) {
   return (
     ((bytes[offset] << 24) |
@@ -75,4 +92,3 @@ export function addPngDensity(source: Uint8Array, dpi: number) {
   }
   return output;
 }
-
