@@ -2,6 +2,22 @@ services:
   codeform:
     build: .
     restart: unless-stopped
+    environment:
+      CODEFORM_ANALYTICS_INTERNAL_URL: http://analytics:3101
     ports:
       - "3000:3000"
+    depends_on:
+      - analytics
 
+  analytics:
+    build: .
+    restart: unless-stopped
+    command: ["python3", "/app/analytics/server.py"]
+    environment:
+      CODEFORM_ANALYTICS_DATABASE: /data/analytics.sqlite3
+      CODEFORM_ANALYTICS_HOST: 0.0.0.0
+    volumes:
+      - analytics-data:/data
+
+volumes:
+  analytics-data:

@@ -41,3 +41,5 @@ yarn-error.log*
 /.interceptor-research/
 /outputs/
 /work/
+__pycache__/
+*.pyc

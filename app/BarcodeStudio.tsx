@@ -238,6 +238,17 @@ function writeBarcodeKindToUrl(kind: BarcodeKind, mode: "push" | "replace") {
   window.history[mode === "push" ? "pushState" : "replaceState"]({ type: kind }, "", url);
 }
 
+function recordAnalyticsEvent(event: "visit" | "generation", barcodeKind?: BarcodeKind) {
+  void fetch("/api/analytics", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ event, barcodeKind }),
+    keepalive: true,
+  }).catch(() => {
+    // Analytics must never interrupt barcode generation.
+  });
+}
+
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
@@ -301,6 +312,12 @@ export default function BarcodeStudio() {
   const [dimensionsLinked, setDimensionsLinked] = useState(true);
   const lastStandardPreset = useRef<"target" | "compact">("target");
   const dimensionInputRef = useRef<HTMLInputElement>(null);
+  const intendedKindsRef = useRef(new Set<BarcodeKind>());
+  const recordedKindsRef = useRef(new Set<BarcodeKind>());
+
+  useEffect(() => {
+    recordAnalyticsEvent("visit");
+  }, []);
 
   useEffect(() => {
     if (!dimensionEdit) return;
@@ -537,6 +554,17 @@ export default function BarcodeStudio() {
   ]);
   const rendered = renderResult.barcode;
 
+  useEffect(() => {
+    if (
+      !storageReady ||
+      !rendered ||
+      !intendedKindsRef.current.has(kind) ||
+      recordedKindsRef.current.has(kind)
+    ) return;
+    intendedKindsRef.current.delete(kind);
+    recordedKindsRef.current.add(kind);
+    recordAnalyticsEvent("generation", kind);
+  }, [kind, rendered, storageReady]);
   const dataError = validation.error ?? null;
   const settingsError = dataError ? null : renderResult.error;
   const hasCapacityError = Boolean(!dataError && capacity && !capacity.fits);
@@ -658,6 +686,7 @@ export default function BarcodeStudio() {
 
   const setValue = (next: string) => {
     const normalized = next;
+    intendedKindsRef.current.add(kind);
     setValues((current) => {
       if (!PORTABLE_2D_SET.has(kind)) return { ...current, [kind]: normalized };
       const updated = { ...current };
@@ -675,6 +704,7 @@ export default function BarcodeStudio() {
 
   const selectKind = (nextKind: BarcodeKind) => {
     if (nextKind === kind) return;
+    intendedKindsRef.current.add(nextKind);
     applyKindSettings(nextKind);
     writeBarcodeKindToUrl(nextKind, "push");
   };

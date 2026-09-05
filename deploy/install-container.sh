@@ -24,8 +24,11 @@ if ! id codeform >/dev/null 2>&1; then
   useradd --system --home-dir /opt/codeform --shell /usr/sbin/nologin codeform
 fi
 install -d -o codeform -g codeform -m 0755 /opt/codeform/.wrangler
+install -d -o codeform -g codeform -m 0750 /var/lib/codeform-analytics
 chown -R codeform:codeform /opt/codeform
 install -o root -g root -m 0644 /tmp/codeform.service /etc/systemd/system/codeform.service
+install -o root -g root -m 0644 /opt/codeform/deploy/codeform-analytics.service /etc/systemd/system/codeform-analytics.service
 
 systemctl daemon-reload
+systemctl enable --now codeform-analytics.service
 systemctl enable --now codeform.service

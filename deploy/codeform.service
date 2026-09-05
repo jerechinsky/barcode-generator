@@ -10,6 +10,7 @@ Group=codeform
 WorkingDirectory=/opt/codeform
 Environment=NODE_ENV=production
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-/etc/codeform/access.env
 ExecStart=/usr/local/bin/npm run start -- --hostname 0.0.0.0 --port 3000
 Restart=on-failure
 RestartSec=3

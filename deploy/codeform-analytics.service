@@ -1,0 +1,23 @@
+[Unit]
+Description=Codeform anonymous analytics storage
+After=network.target
+
+[Service]
+Type=simple
+User=codeform
+Group=codeform
+WorkingDirectory=/opt/codeform
+Environment=CODEFORM_ANALYTICS_DATABASE=/var/lib/codeform-analytics/analytics.sqlite3
+ExecStart=/usr/bin/python3 /opt/codeform/analytics/server.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/codeform-analytics
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
